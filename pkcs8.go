@@ -15,6 +15,7 @@ import (
 	"encoding/asn1"
 	"errors"
 	"fmt"
+	"math/big"
 
 	"golang.org/x/crypto/pbkdf2"
 )
@@ -71,6 +72,16 @@ type privateKeyInfo struct {
 	Version             int
 	PrivateKeyAlgorithm []asn1.ObjectIdentifier
 	PrivateKey          []byte
+}
+
+type publicKeyInfo struct {
+	PublicKeyAlgorithm []asn1.ObjectIdentifier
+	PublicKey          asn1.BitString
+}
+
+type pkcs1PublicKey struct {
+	N *big.Int
+	E int
 }
 
 // Encrypted PKCS8
@@ -292,6 +303,25 @@ func convertPrivateKeyToPKCS8Encrypted(priv interface{}, password []byte) ([]byt
 	encryptedPkey := encryptedPrivateKeyInfo{pbes2algo, encryptedKey}
 
 	return asn1.Marshal(encryptedPkey)
+}
+
+func ConvertPublicKeyToPKCS8(pub interface{}) ([]byte, error) {
+	var pkey publicKeyInfo
+
+	switch pub := pub.(type) {
+	case *rsa.PublicKey:
+		pkey.PublicKeyAlgorithm = make([]asn1.ObjectIdentifier, 1)
+		pkey.PublicKeyAlgorithm[0] = oidPublicKeyRSA
+		bytes, err := asn1.Marshal(pkcs1PublicKey{N: pub.N, E: pub.E})
+		if err != nil {
+			return nil, err
+		}
+		pkey.PublicKey = asn1.BitString{Bytes: bytes, BitLength: len(bytes)}
+	default:
+		return nil, fmt.Errorf("unsupported key type: %T", pub)
+	}
+
+	return asn1.Marshal(pkey)
 }
 
 // ConvertPrivateKeyToPKCS8 converts the private key into PKCS#8 format.
